@@ -3,9 +3,12 @@ package manager
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"passshell/internal/crypto"
+
+	"golang.org/x/term"
 )
 
 type PasswordManager struct {
@@ -27,7 +30,21 @@ func New(filename string, key []byte) (*PasswordManager, error) {
 	return pm, nil
 }
 
-func (pm *PasswordManager) AddPassword(service, username, password string) error {
+func GetSecureInput(prompt string) (string, error) {
+	fmt.Print(prompt)
+	bytePassword, err := term.ReadPassword(int(os.Stdin.Fd()))
+	fmt.Println()
+	if err != nil {
+		return "", err
+	}
+	return string(bytePassword), nil
+}
+
+func (pm *PasswordManager) AddPassword(service, username string) error {
+	password, err := GetSecureInput("Enter password: ")
+	if err != nil {
+		return fmt.Errorf("error reading password: %v", err)
+	}
 	if _, ok := pm.passwords[service]; !ok {
 		pm.passwords[service] = make(map[string]string)
 	}
@@ -35,24 +52,17 @@ func (pm *PasswordManager) AddPassword(service, username, password string) error
 	return pm.save()
 }
 
-func (pm *PasswordManager) GetPassword(service, username string) (string, error) {
+func (pm *PasswordManager) GetPassword(service string) (map[string]string, error) {
 	if users, ok := pm.passwords[service]; ok {
-		if password, ok := users[username]; ok {
-			return password, nil
-		}
+		return users, nil
 	}
-	return "", errors.New("password not found")
+	return nil, fmt.Errorf("no passwords found for service: %s", service)
 }
 
-func (pm *PasswordManager) DeletePassword(service, username string) error {
-	if users, ok := pm.passwords[service]; ok {
-		if _, ok := users[username]; ok {
-			delete(users, username)
-			if len(users) == 0 {
-				delete(pm.passwords, service)
-			}
-			return pm.save()
-		}
+func (pm *PasswordManager) DeletePassword(service string) error {
+	if _, ok := pm.passwords[service]; ok {
+		delete(pm.passwords, service)
+		return pm.save()
 	}
 	return errors.New("password not found")
 }
